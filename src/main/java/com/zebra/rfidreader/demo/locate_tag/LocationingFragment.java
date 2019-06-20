@@ -1,0 +1,198 @@
+package com.zebra.rfidreader.demo.locate_tag;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.support.design.widget.FloatingActionButton;
+import android.support.v4.app.Fragment;
+import android.text.InputFilter;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.ArrayAdapter;
+import android.widget.AutoCompleteTextView;
+
+import com.zebra.rfid.api3.RFIDResults;
+import com.zebra.rfidreader.demo.R;
+import com.zebra.rfidreader.demo.application.Application;
+import com.zebra.rfidreader.demo.common.ResponseHandlerInterfaces;
+import com.zebra.rfidreader.demo.common.hextoascii;
+import com.zebra.rfidreader.demo.home.MainActivity;
+
+import static com.zebra.rfidreader.demo.home.MainActivity.filter;
+
+/**
+ * A simple {@link android.support.v4.app.Fragment} subclass.
+ * <p/>
+ * Use the {@link LocationingFragment#newInstance} factory method to
+ * create an instance of this fragment.
+ * <p/>
+ * Fragment to handle locationing
+ */
+public class LocationingFragment extends Fragment implements ResponseHandlerInterfaces.TriggerEventHandler, ResponseHandlerInterfaces.ResponseStatusHandler {
+    private RangeGraph locationBar;
+    //private TextView distance;
+    private FloatingActionButton btn_locate;
+    private AutoCompleteTextView et_locateTag;
+    private ArrayAdapter<String> adapter;
+
+    public LocationingFragment() {
+        // Required empty public constructor
+    }
+
+    /**
+     * Use this factory method to create a new instance of
+     * this fragment using the provided parameters.
+     *
+     * @return A new instance of fragment LocationingFragment.
+     */
+    public static LocationingFragment newInstance() {
+        return new LocationingFragment();
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        // Inflate the layout for this fragment
+        return inflater.inflate(R.layout.fragment_locationing, container, false);
+    }
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
+
+        locationBar = (RangeGraph) getActivity().findViewById(R.id.locationBar);
+        // distance=(TextView)getActivity().findViewById(R.id.distance);
+        btn_locate = (FloatingActionButton) getActivity().findViewById(R.id.btn_locate);
+        et_locateTag = (AutoCompleteTextView) getActivity().findViewById(R.id.lt_et_epc);
+        if(Application.asciiMode == true)
+                et_locateTag.setFilters(new InputFilter[] {filter});
+            else
+                et_locateTag.setFilters(new InputFilter[] {filter, new InputFilter.AllCaps()});
+        Application.updateTagIDs();
+        adapter = new ArrayAdapter<>(getActivity(),
+                android.R.layout.simple_dropdown_item_1line, Application.tagIDs);
+        et_locateTag.setAdapter(adapter);
+        if (et_locateTag != null && Application.locateTag != null) {
+
+            if(Application.asciiMode == true)
+                et_locateTag.setText(hextoascii.convert( Application.locateTag));
+            else
+                et_locateTag.setText(Application.locateTag);
+
+
+        }
+        locationBar.setValue(0);
+        if (Application.isLocatingTag) {
+            if (btn_locate != null)
+                btn_locate.setImageResource(R.drawable.ic_play_stop);
+            showTagLocationingDetails();
+        } else {
+            if (btn_locate != null) {
+                btn_locate.setImageResource(android.R.drawable.ic_media_play);
+            }
+        }
+    }
+
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        Application.locateTag = et_locateTag.getText().toString();
+    }
+
+    public void showTagLocationingDetails() {
+        if (Application.TagProximityPercent != -1) {
+           /* if (distance != null)
+                distance.setText(Application.tagProximityPercent.Proximitypercent + "%");*/
+            if (locationBar != null && Application.TagProximityPercent != -1) {
+                locationBar.setValue((short) Application.TagProximityPercent);
+                locationBar.invalidate();
+                locationBar.requestLayout();
+            }
+        }
+    }
+
+    public void handleLocateTagResponse() {
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                showTagLocationingDetails();
+            }
+        });
+    }
+
+    @Override
+    public void triggerPressEventRecieved() {
+        if (!Application.isLocatingTag)
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    btn_locate.setImageResource(android.R.drawable.ic_media_play);
+                    ((MainActivity) getActivity()).locationingButtonClicked(btn_locate);
+                }
+            });
+    }
+
+    @Override
+    public void triggerReleaseEventRecieved() {
+        if (Application.isLocatingTag) {
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    btn_locate.setImageResource(R.drawable.ic_play_stop);
+                    ((MainActivity) getActivity()).locationingButtonClicked(btn_locate);
+                }
+            });
+        }
+    }
+
+    public void resetLocationingDetails(boolean isDeviceDisconnected) {
+        if (btn_locate != null) {
+            btn_locate.setImageResource(android.R.drawable.ic_media_play);
+        }
+        if (isDeviceDisconnected && locationBar != null) {
+            locationBar.setValue(0);
+            locationBar.invalidate();
+            locationBar.requestLayout();
+        }
+        if (et_locateTag != null) {
+            et_locateTag.setFocusableInTouchMode(true);
+            et_locateTag.setFocusable(true);
+        }
+    }
+
+
+    //@Override
+    public void handleStatusResponse(final RFIDResults results) {
+        getActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (!results.equals(RFIDResults.RFID_API_SUCCESS)) {
+                    //String command = statusData.command.trim();
+                    //if (command.equalsIgnoreCase("lt") || command.equalsIgnoreCase("locatetag"))
+                    {
+                        Application.isLocatingTag = false;
+                        if (btn_locate != null) {
+                            btn_locate.setImageResource(android.R.drawable.ic_media_play);
+                        }
+                        if (et_locateTag != null) {
+                            et_locateTag.setFocusableInTouchMode(true);
+                            et_locateTag.setFocusable(true);
+                        }
+                    }
+
+                }
+            }
+        });
+    }
+}
